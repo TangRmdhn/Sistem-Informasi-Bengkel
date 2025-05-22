@@ -3,6 +3,8 @@
 #include <fstream>
 
 using namespace std;
+string Perbaikan[7] = {"Ganti Oli","Turun Mesin","CVT","Komstir","Servis","Pengereman","Ganti Ban"};
+int WaktuPerbaikan[7] = {10,240,20,15,30,20,20};
 
 struct Kendaraan{
     string merk;
@@ -13,8 +15,8 @@ struct Kendaraan{
 
 struct Kerusakan{
     int jenis;
-    int waktu;
-    int sparepart;
+    int banyaksparepart;
+    int sparepart[5];
 };
 
 struct Customer{
@@ -33,10 +35,26 @@ struct Warehouse{
     int hargajual;
 };
 
-Warehouse stok[3] = {{"VBelt", 10, 50000},
-                     {"Oli", 15, 40000},
-                     {"Baut", 30, 10000}};
-
+Warehouse stok[19] = {{"Oli", 10, 60000},
+                     {"Filter Oli", 5, 40000},
+                     {"Klep", 10, 40000},
+                     {"Radiator", 5, 40000},
+                     {"SetBlock Mesin", 5, 2000000},
+                     {"Transmision Set", 5, 1000000},
+                     {"Gearset", 5, 300000},
+                     {"V Belt", 15, 40000},
+                     {"Per CVT", 15, 40000},
+                     {"Roller CVT", 15, 40000},
+                     {"Brake Pad", 20, 40000},
+                     {"Kaliper", 5, 950000},
+                     {"Brake Disc", 10, 300000},
+                     {"Selang Rem", 15, 100000},
+                     {"Ban", 20, 200000},
+                     {"Speedometer", 5, 40000},
+                     {"Baut M6", 20, 2000},
+                     {"Baut M4", 20, 2000},
+                     {"Boshing", 10, 35000}};
+                     
 int DataCust = 0;
 
 int Antrian[100] = {false};
@@ -47,8 +65,6 @@ int OnWork = 0;
 
 int Pembayaran[10] = {false};
 int OnPayment = 0;
-
-
 
 void Register(){
 
@@ -64,14 +80,30 @@ void Register(){
     cout << "Warna : "; cin >> cust[DataCust].motor.warna;
     cout << "No Polisi : "; cin >> cust[DataCust].motor.NoPol;
     
-    // for (jenis kerusakan)
+    for(int i = 0; i < 7; i++){
+        cout << i+1 << ". " << Perbaikan[i] << endl;
+    }
     cout << "\nJenis Kerusakan : "; cin >> IDkerusakan;
-    
+    IDkerusakan -= 1;
     cust[DataCust].perbaikan.jenis = IDkerusakan;
-    // cust[DataCust].perbaikan.waktu = 
-    int jasa = 10000;
 
-    cust[DataCust].totalharga = stok[IDkerusakan].hargajual + jasa;
+    int totalSparepart;
+    for(int i = 0; i < 19; i++){
+        cout << i+1 << ". " << stok[i].barang << endl;
+    }
+    cout << "Butuh berapa Sparepart : "; cin >> totalSparepart;
+    cust[DataCust].perbaikan.banyaksparepart = totalSparepart;
+    for(int i = 0; i < totalSparepart; i++){
+        int pil;
+        cout << "Masukan sparepart " << i+1 << " : "; cin >> pil;
+        pil -= 1;
+        cust[DataCust].perbaikan.sparepart[i] = pil;
+        cust[DataCust].totalharga += stok[pil].hargajual;
+    }
+
+    int jasa = 20000;
+
+    cust[DataCust].totalharga += jasa;
 
     if(OnWork < 3){
         Dikerjakan[OnWork] = DataCust;
@@ -117,7 +149,6 @@ void Finish(){
 //         waktu += CountEstimate(i, waktu)
 //     }
 // }
-
 
 // void EstimateTime(){
 //     int waktu;
@@ -202,7 +233,7 @@ void Gudang(){
 int main(){
     int pilih;
     while(true){
-        cout << "1. Register\n";
+        cout << "1. Daftar Motor\n";
         cout << "2. Finish\n";
         cout << "3. Gudang\n";
         cout << "Pilih Menu : "; cin >> pilih;
