@@ -3,6 +3,8 @@
 #include <fstream>
 
 using namespace std;
+string Perbaikan[7] = {"Ganti Oli","Turun Mesin","CVT","Komstir","Servis","Pengereman","Ganti Ban"};
+int WaktuPerbaikan[7] = {10,240,20,15,30,20,20};
 
 struct Kendaraan{
     string merk;
