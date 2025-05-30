@@ -1,0 +1,11 @@
+0 Budi 08123456789 Bandung budi@email.com 500000 Honda Beat Merah D1234ABC 1 2 1001 1002
+3 Siti 08987654321 Jakarta siti@email.com 750000 Yamaha NMax Hitam B4321XYZ 2 3 1003 1004 1005
+1 Andi 08211234567 Surabaya andi@email.com 650000 Suzuki Satria Biru S9876DEF 3 1 1006
+1 Rina 08199887766 Medan rina@email.com 800000 Kawasaki Ninja Hitam M5566GHI 4 2 1007 1008
+1 Tono 08334455667 Bandung tono@email.com 700000 Honda Supra Putih D3344JKL 5 3 1009 1010 1011
+2 Dewi 08776655443 Semarang dewi@email.com 600000 Yamaha Mio Merah S2233MNO 6 1 1012
+2 Agus 08223344556 Yogyakarta agus@email.com 550000 Suzuki Smash Hijau Y9988PQR 6 2 1013 1014
+2 Fitri 08557788990 Palembang fitri@email.com 720000 Honda Vario Abu-Abu P7766STU 1 1 1015
+2 Rudi 08123499887 Makassar rudi@email.com 480000 Yamaha Jupiter Biru M4433VWX 3 2 1016 1017
+2 Nina 08901122334 Bali nina@email.com 830000 Kawasaki KLX Hitam B1122YZA 2 3 1018 1019 1020
+2 Arsya 08949794 Bantul arsya@gmail.com 420000 Yahaha Supra Hitam AB2020CDE 4 2 12 13

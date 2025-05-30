@@ -1,7 +1,8 @@
-// bengkel.cpp
+// bengkel.cpp - Modified with countdown functionality
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include <ctime>
 
 using namespace std;
 string Perbaikan[7] = {"Ganti Oli","Turun Mesin","CVT","Komstir","Servis","Pengereman","Ganti Ban"};
@@ -28,7 +29,9 @@ struct Customer{
     Kendaraan motor;
     Kerusakan perbaikan;
     int totalharga;
-    int ket;                // 0 : Sudah Selesai | 1 : Sedang dikerjakan | 2 : Antrian | 3 : Pembayaran 
+    int detikEstimasi;        // Tambahan: estimasi waktu dalam detik
+    time_t waktuMulai;        // Tambahan: waktu mulai perbaikan
+    int keterangan;           // Tambahan: 0=Tidak diperbaiki, 1=sedang diperbaiki, 2=antrian, 3=Proses pembayaran
 }; Customer cust[100];
 
 struct Warehouse{
@@ -52,6 +55,18 @@ int OnPayment = 0;
 
 string namaFile = "DataCustomer.txt";
 
+// Fungsi countdown
+int hitungCountdown(int durasiDetik, time_t waktuMulai) {
+    time_t waktuSekarang = time(0);
+    int selisih = static_cast<int>(waktuSekarang - waktuMulai);
+    int sisa = durasiDetik - selisih;
+
+    // Pastikan tidak negatif
+    if (sisa < 0) sisa = 0;
+
+    return sisa;
+}
+
 string GantiUnderscore(string nama){
     for (int i = 0; i < nama.length(); i++){
         if(nama[i] == '_'){
@@ -71,13 +86,14 @@ string GantiSpasi(string nama){
 }
 
 void OpenFile(){
-    int ket;
-
     string nama;
     string no_telp;
     string alamat;
     string email;
     int totalharga;
+    int detikEstimasi;
+    time_t waktuMulai;
+    int keterangan;
 
     string merk;
     string jenis;
@@ -90,7 +106,7 @@ void OpenFile(){
 
     ifstream Database(namaFile);
     if (Database.is_open()){
-        while (Database >> ket >> nama >> no_telp >> alamat >> email >> totalharga >> merk >> jenis >> warna >> NoPol >> jenisRusak >> banyaksparepart) {
+        while (Database >> nama >> no_telp >> alamat >> email >> totalharga >> detikEstimasi >> waktuMulai >> keterangan >> merk >> jenis >> warna >> NoPol >> jenisRusak >> banyaksparepart) {
             
             // Membaca array sparepart sebanyak banyaksparepart
             for (int i = 0; i < banyaksparepart; ++i) {
@@ -98,13 +114,14 @@ void OpenFile(){
             }
 
             // Simpan ke struct
-            cust[DataCust].ket = ket;
-
             cust[DataCust].nama = nama;
             cust[DataCust].no_telp = no_telp;
             cust[DataCust].alamat = alamat;
             cust[DataCust].email = email;
             cust[DataCust].totalharga = totalharga;
+            cust[DataCust].detikEstimasi = detikEstimasi;
+            cust[DataCust].waktuMulai = waktuMulai;
+            cust[DataCust].keterangan = keterangan;
 
             cust[DataCust].motor.merk = merk;
             cust[DataCust].motor.jenis = jenis;
@@ -131,12 +148,14 @@ void SaveFile() {
     if (Database.is_open()) {
         for (int i = 0; i < DataCust; ++i) {
             // Tulis data customer dan kendaraannya
-            Database << cust[i].ket << " "
-                     << cust[i].nama << " "
+            Database << cust[i].nama << " "
                      << cust[i].no_telp << " "
                      << cust[i].alamat << " "
                      << cust[i].email << " "
                      << cust[i].totalharga << " "
+                     << cust[i].detikEstimasi << " "
+                     << cust[i].waktuMulai << " "
+                     << cust[i].keterangan << " "
                      << cust[i].motor.merk << " "
                      << cust[i].motor.jenis << " "
                      << cust[i].motor.warna << " "
@@ -192,8 +211,9 @@ void OpenStok() {
 void SaveStatus() {
     ofstream fileWork("Dikerjakan.txt");
     if (fileWork.is_open()) {
-        for(int i = 0; i < OnWork; i++) {
-            fileWork << Dikerjakan[i] << endl;
+        fileWork << OnWork << endl;
+        for(int i = 0; i < OnWork; i++){
+            fileWork << Dikerjakan[i];
         }
         fileWork.close();
     } else {
@@ -202,6 +222,7 @@ void SaveStatus() {
 
     ofstream fileQueue("Antrian.txt");
     if (fileQueue.is_open()) {
+        fileQueue << OnQueue << endl;
         for (int i = 0; i < OnQueue; i++) {
             fileQueue << Antrian[i] << endl;
         }
@@ -212,12 +233,13 @@ void SaveStatus() {
     
     ofstream filePayment("Pembayaran.txt");
     if (filePayment.is_open()) {
+        filePayment << OnPayment << endl;
         for (int i = 0; i < OnPayment; i++) {
             filePayment << Pembayaran[i] << endl;
         }
         filePayment.close();
     } else {
-        cout << "Gagal menyimpan file Pembayaran.txt\n";
+        cout << "Gagal pembayan file Antrian.txt\n";
     }
 }
 
@@ -232,11 +254,9 @@ void LoadStatus() {
         cout << "File Dikerjakan.txt tidak ditemukan.\n";
     }
 
-    int que;
     ifstream fileQueue("Antrian.txt");
     if (fileQueue.is_open()) {
-        while(fileQueue >> que){
-            Antrian[OnQueue] = que;
+        while(fileQueue >> Antrian[OnQueue]){
             OnQueue++;
         }
         fileQueue.close();
@@ -256,7 +276,6 @@ void LoadStatus() {
 }
 
 void Register(){
-
     int IDkerusakan;
     cin.ignore();
     cout << "Nama : "; getline(cin, cust[DataCust].nama);
@@ -292,17 +311,20 @@ void Register(){
     }
 
     int jasa = 20000;
-
     cust[DataCust].totalharga += jasa;
+
+    // Set estimasi waktu dalam detik (konversi dari menit)
+    cust[DataCust].detikEstimasi = WaktuPerbaikan[IDkerusakan] * 60;
+    cust[DataCust].waktuMulai = time(0); // Set waktu mulai sekarang
 
     if(OnWork < 3){
         Dikerjakan[OnWork] = DataCust;
         OnWork += 1;
-        cust[DataCust].ket = 1;
+        cust[DataCust].keterangan = 1; // Sedang diperbaiki
     } else {
         Antrian[OnQueue] = DataCust;
         OnQueue += 1;
-        cust[DataCust].ket = 2;
+        cust[DataCust].keterangan = 2; // Antrian
     }
     DataCust += 1;
 }
@@ -317,86 +339,41 @@ void CetakStruk(int id) {
 }
 
 void ListDikerjakan(){
-    cout << setfill('=') << setw(67) << " " << endl;
-    cout << "|" << right << setfill(' ') << setw(26) << ' ' << "Sedang Dikerjakan" << right << setfill(' ') << setw(22) << "|" << endl;
-    cout << "|" << right << setfill('=') << setw(65) << "|" << endl;
+    cout << "Kendaraan yang sedang dikerjakan : " << endl << endl;
     cout << "| NO " << left << setfill(' ') << setw(20) << "|Merk" << left << setfill(' ') << setw(20) << "|Jenis" << left << setfill(' ') << setw(20) << "|No Polisi" << "|" << endl;
     cout << "|====" << left << setfill('=') << setw(20) << "|" << "|" << right << setfill('=') << setw(20) << "|"  << right << setfill('=') << setw(20) << "|" << endl;
     for(int i = 0; i < OnWork; i++){
         cout << "| " << i+1 << "  |" << left << setfill(' ') << setw(19) << cust[Dikerjakan[i]].motor.merk << "|" << left << setfill(' ') << setw(19) << cust[Dikerjakan[i]].motor.jenis << "|"  << left << setfill(' ') << setw(19) << cust[Dikerjakan[i]].motor.NoPol << "|" << endl;
     }
-    cout << right << setfill('=') << setw(67) << " " << endl;
-}
-
-void ListAntrian(){
-    cout << setfill('=') << setw(67) << " " << endl;
-    cout << "|" << right << setfill(' ') << setw(27) << ' ' << "Antrian Service" << right << setfill(' ') << setw(23) << "|" << endl;
-    cout << "|" << right << setfill('=') << setw(65) << "|" << endl;
-    cout << "| NO " << left << setfill(' ') << setw(20) << "|Merk" << left << setfill(' ') << setw(20) << "|Jenis" << left << setfill(' ') << setw(20) << "|No Polisi" << "|" << endl;
-    cout << "|====" << left << setfill('=') << setw(20) << "|" << "|" << right << setfill('=') << setw(20) << "|"  << right << setfill('=') << setw(20) << "|" << endl;
-    for(int i = 0; i < OnQueue; i++){
-        int IdMotor = Antrian[i];
-        cout << "| " << i+1 << "  |" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.merk << "|" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.jenis << "|"  << left << setfill(' ') << setw(19) << cust[IdMotor].motor.NoPol << "|" << endl;
-    }
-    cout << right << setfill('=') << setw(67) << " " << endl;
-}
-
-void ListPembayaran(){
-    cout << setfill('=') << setw(67) << " " << endl;
-    cout << "|" << right << setfill(' ') << setw(20) << ' ' << "Kendaraan yang sudah selesai" << right << setfill(' ') << setw(17) << "|" << endl;
-    cout << "|" << right << setfill('=') << setw(65) << "|" << endl;
-    cout << "| NO " << left << setfill(' ') << setw(20) << "|Merk" << left << setfill(' ') << setw(20) << "|Jenis" << left << setfill(' ') << setw(20) << "|No Polisi" << "|" << endl;
-    cout << "|====" << left << setfill('=') << setw(20) << "|" << "|" << right << setfill('=') << setw(20) << "|"  << right << setfill('=') << setw(20) << "|" << endl;
-    for(int i = 0; i < OnPayment; i++){
-        int IdMotor = Pembayaran[i];
-        cout << "| " << i+1 << "  |" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.merk << "|" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.jenis << "|"  << left << setfill(' ') << setw(19) << cust[IdMotor].motor.NoPol << "|" << endl;
-    }
-    cout << right << setfill('=') << setw(67) << " " << endl;
 }
 
 void Finish(){
     int pilih;
+    cout << "\nKendaraan Mana yang finish : "; cin >> pilih;
+    int IdMotor = Dikerjakan[pilih-1];
 
-    cout << "\nMotor Mana yang sudah selesai : "; cin >> pilih;
-
-    int IdMotor = pilih-1;
-
-    cust[Pembayaran[IdMotor]].ket = 3;
-
-    Pembayaran[OnPayment] = Dikerjakan[IdMotor];
+    Pembayaran[OnPayment] = IdMotor;
     OnPayment++;
+    cust[IdMotor].keterangan = 3; // Proses pembayaran
     
     if(OnQueue == 0){
-        for(int i = IdMotor; i < 3; i++){
+        for(int i = pilih-1; i < OnWork-1; i++){
             Dikerjakan[i] = Dikerjakan[i+1];
         }
         OnWork -= 1;
     } else if(OnQueue > 0){
-        Dikerjakan[IdMotor] = Antrian[0];
-        OnQueue -= 1;   
+        // Pindahkan dari antrian ke dikerjakan
+        int newWork = Antrian[0];
+        Dikerjakan[pilih-1] = newWork;
+        cust[newWork].keterangan = 1; // Sedang diperbaiki
+        cust[newWork].waktuMulai = time(0); // Update waktu mulai
+        
+        // Shift antrian
+        for(int i = 0; i < OnQueue-1; i++){
+            Antrian[i] = Antrian[i+1];
+        }
+        OnQueue -= 1;
     }
-
-    for(int i = 0; i < OnQueue; i++){
-        Antrian[i] = Antrian[i+1];
-    }
-}
-
-void Payment(){
-    int pilih;
-
-    cout << "\nKendaraan Mana yang ingin dibayar : "; cin >> pilih;
-    int index = pilih-1;
-    int idCustomer = Pembayaran[index];
-
-    cust[idCustomer].ket = 0;
-
-    CetakStruk(idCustomer);
-
-    for(int i = index; i < OnPayment-1; i++){
-        Pembayaran[i] = Pembayaran[i + 1];
-    }
-    
-    OnPayment--;
 }
 
 int WaktuMinimumDikerjakan() {
@@ -422,8 +399,6 @@ void EstimasiDikerjakan() {
     for (int i = 0; i < OnWork; i++) {
         int id = Dikerjakan[i];
         int waktuServis = WaktuPerbaikan[cust[id].perbaikan.jenisRusak];
-        // cout << cust[id].motor.NoPol << " estimasi waktu: 0 - " << waktuServis << " menit\n";
-
         cout << "| " << i+1 << "  |" << left << setfill(' ') << setw(19) << cust[id].motor.merk << "|" << left << setfill(' ') << setw(19) << cust[id].motor.jenis << "|"  << left << setfill(' ') << setw(19) << cust[id].motor.NoPol << "|" << left << setfill(' ') << setw(19) << Perbaikan[cust[id].perbaikan.jenisRusak] << "|" << left << setfill(' ') << setw(19) << waktuServis << "|" << endl;
     }
 }
@@ -493,15 +468,12 @@ bool Gudang(){
     int BarangGudang = 19;
     char pilih;
 
-    cout << setfill('=') << setw(67) << " " << endl;
-    cout << "|" << right << setfill(' ') << setw(29) << ' ' << "Sparepart" << right << setfill(' ') << setw(27) << "|" << endl;
-    cout << "|" << right << setfill('=') << setw(65) << "|" << endl;
+    cout << "Sparepart di Gudang : " << endl << endl;
     cout << "| NO " << left << setfill(' ') << setw(20) << "|Nama Sparepart" << left << setfill(' ') << setw(20) << "|Jumlah Barang" << left << setfill(' ') << setw(20) << "|Harga Jual" << "|" << endl;
     cout << "|====" << left << setfill('=') << setw(20) << "|" << "|" << right << setfill('=') << setw(20) << "|"  << right << setfill('=') << setw(20) << "|" << endl;
     for(int i = 0; i < BarangGudang; i++){
         cout << "| " << left << setfill(' ') << setw(3) << i+1 << "|" << left << setfill(' ') << setw(19) << stok[i].barang << "|" << left << setfill(' ') << setw(19) << stok[i].QTY << "|"  << left << setfill(' ') << setw(19) << stok[i].hargajual << "|" << endl;
     }
-    cout << right << setfill('=') << setw(67) << " " << endl;
 
     cout << "1. Sort Nama Sparepart\n";
     cout << "2. Sort Jumlah Sparepart\n";
@@ -528,72 +500,178 @@ bool Gudang(){
     return true;
 }
 
+void ListAntrian(){
+    cout << "Antrian servis : " << endl << endl;
+    cout << "| NO " << left << setfill(' ') << setw(20) << "|Merk" << left << setfill(' ') << setw(20) << "|Jenis" << left << setfill(' ') << setw(20) << "|No Polisi" << "|" << endl;
+    cout << "|====" << left << setfill('=') << setw(20) << "|" << "|" << right << setfill('=') << setw(20) << "|"  << right << setfill('=') << setw(20) << "|" << endl;
+    for(int i = 0; i < OnQueue; i++){
+        int IdMotor = Antrian[i];
+        cout << "| " << i+1 << "  |" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.merk << "|" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.jenis << "|"  << left << setfill(' ') << setw(19) << cust[IdMotor].motor.NoPol << "|" << endl;
+    }
+}
+
+void ListPembayaran(){
+    cout << "Kendaraan yang harus dibayar : " << endl << endl;
+    cout << "| NO " << left << setfill(' ') << setw(20) << "|Merk" << left << setfill(' ') << setw(20) << "|Jenis" << left << setfill(' ') << setw(20) << "|No Polisi" << "|" << endl;
+    cout << "|====" << left << setfill('=') << setw(20) << "|" << "|" << right << setfill('=') << setw(20) << "|"  << right << setfill('=') << setw(20) << "|" << endl;
+    for(int i = 0; i < OnPayment; i++){
+        int IdMotor = Pembayaran[i];
+        cout << "| " << i+1 << "  |" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.merk << "|" << left << setfill(' ') << setw(19) << cust[IdMotor].motor.jenis << "|"  << left << setfill(' ') << setw(19) << cust[IdMotor].motor.NoPol << "|" << endl;
+    }
+}
+
 void Bayar(){
     int pilih;
-    cout << "\nKendaraan Mana yang finish : "; cin >> pilih;
+    cout << "\nKendaraan Mana yang selesai pembayaran : "; cin >> pilih;
+    int IdMotor = Pembayaran[pilih-1];
+    
+    CetakStruk(IdMotor);
+    
+    // Update keterangan menjadi selesai/tidak diperbaiki
+    cust[IdMotor].keterangan = 0;
+    
+    // Hapus dari array pembayaran
+    for(int i = pilih-1; i < OnPayment-1; i++){
+        Pembayaran[i] = Pembayaran[i+1];
+    }
+    OnPayment--;
+}
 
-    CetakStruk(pilih-1);
+int CariCust(string nopol){
+    for(int i = 0; i < DataCust; i++){
+        if(nopol == cust[i].motor.NoPol){
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Fungsi untuk menampilkan status keterangan
+string getStatusKeterangan(int keterangan) {
+    switch(keterangan) {
+        case 0: return "Tidak diperbaiki/Selesai";
+        case 1: return "Sedang diperbaiki";
+        case 2: return "Dalam antrian";
+        case 3: return "Proses pembayaran";
+        default: return "Status tidak diketahui";
+    }
+}
+
+// Fungsi customer untuk cek status motor
+void SearchCust(){
+    string nopol;
+    cout << "Masukan Nomor Polisi : "; cin >> nopol;
+    int IdCust = CariCust(nopol);
+    
+    if(IdCust == -1){
+        cout << "Tidak ada Nomor Polisi tersebut dalam database\n";
+        return;
+    }
+    
+    cout << "\n===== STATUS KENDARAAN =====\n";
+    cout << "Nama Pemilik: " << cust[IdCust].nama << endl;
+    cout << "No Polisi: " << cust[IdCust].motor.NoPol << endl;
+    cout << "Merk: " << cust[IdCust].motor.merk << endl;
+    cout << "Jenis: " << cust[IdCust].motor.jenis << endl;
+    cout << "Jenis Perbaikan: " << Perbaikan[cust[IdCust].perbaikan.jenisRusak] << endl;
+    cout << "Status: " << getStatusKeterangan(cust[IdCust].keterangan) << endl;
+    
+    // Tampilkan countdown jika sedang diperbaiki
+    if(cust[IdCust].keterangan == 1) {
+        int sisaDetik = hitungCountdown(cust[IdCust].detikEstimasi, cust[IdCust].waktuMulai);
+        int menit = sisaDetik / 60;
+        int detik = sisaDetik % 60;
+        
+        cout << "Sisa waktu perbaikan: " << menit << " menit " << detik << " detik" << endl;
+        
+        if(sisaDetik <= 0) {
+            cout << "** PERBAIKAN SUDAH SELESAI! Silakan menuju ke kasir untuk pembayaran **" << endl;
+        }
+    }
+    
+    cout << "Total Biaya: Rp" << cust[IdCust].totalharga << endl;
+    cout << "=============================\n\n";
+}
+
+void CustUI(){
+    int pilih;
+    while(true){
+        cout << "\n=== MENU CUSTOMER ===\n";
+        cout << "1. Cek Status Kendaraan\n";
+        cout << "2. Keluar\n";
+        cout << "Pilihan: "; cin >> pilih;
+        
+        switch(pilih) {
+            case 1:
+                SearchCust();
+                break;
+            case 2:
+                return;
+            default:
+                cout << "Pilihan tidak valid!\n";
+                break;
+        }
+    }
 }
 
 void AdminUI(){
     int pilih;
     while(true){
-        system("cls");
-        cout << "=========== Main Menu ===========\n\n";
         cout << "1. Pendaftaran Motor\n";
-        cout << "2. Gudang\n";
-        cout << "3. Estimasi Waktu\n";
-        cout << "4. List Dikerjakan\n";
-        cout << "5. List Antrian\n";
-        cout << "6. List Pembayaran\n";
-        cout << "7. Save & Exit\n";
+        cout << "3. Gudang\n";
+        cout << "4. Estimasi Waktu\n";
+        cout << "6. List Dikerjakan\n";
+        cout << "7. List Antrian\n";
+        cout << "8. List Pembayaran\n";
+        cout << "9. Save & Exit\n";
         cout << "Pilih Menu : "; cin >> pilih;
         switch (pilih){
             case 1:
                 Register();
             break;
             case 2:
-                while (Gudang()){}
+
             break;
             case 3:
-                TampilkanEstimasi();
+                while (Gudang()){}
             break;
             case 4:
+                TampilkanEstimasi();
+            break;
+            case 6:
                 if(OnWork == 0){
                     cout << "Tidak ada yang sedang dikerjakan" << endl;
                 } else {
-                    int pilih2;
                     ListDikerjakan();
                     cout << "[0] Keluar" << endl;
                     cout << "[1] Selesaikan pekerjaan" << endl;
-                    cout << "Pilih : "; cin >> pilih2;
-                    if(pilih2 == 1){
+                    cout << "Pilih : "; cin >> pilih;
+                    if(pilih == 1){
                         Finish();
                     }
                 }
             break;
-            case 5:
+            case 7:
                 if(OnPayment == 0){
                     cout << "Tidak ada pekerjaan yang selesai" << endl;
                 } else {           
                     ListAntrian();
                 }
             break;
-            case 6:
+            case 8:
                 if(OnPayment == 0){
                     cout << "Tidak ada pekerjaan yang selesai" << endl;
-                } else {
-                    int pilih2;
+                } else {            
                     ListPembayaran();
                     cout << "[0] Keluar" << endl;
                     cout << "[1] Pembayaran" << endl;
-                    cout << "Pilih : "; cin >> pilih2;
-                    if(pilih2 == 1){
-                        Payment();
+                    cout << "Pilih : "; cin >> pilih;
+                    if(pilih == 1){
+                        Bayar();
                     }
                 }
             break;
-            case 7:
+            case 9:
                 return;
             break;
             default:
@@ -602,210 +680,18 @@ void AdminUI(){
     }
 }
 
-// Fungsi untuk mencari posisi customer dalam antrian
-int CariPosisiAntrian(int IdCust) {
-    for(int i = 0; i < OnQueue; i++) {
-        if(IdCust == Antrian[i]) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// Fungsi untuk mencari posisi customer dalam list yang sedang dikerjakan
-int CariPosisiDikerjakan(int IdCust) {
-    for(int i = 0; i < OnWork; i++) {
-        if(IdCust == Dikerjakan[i]) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// Fungsi estimasi waktu yang diperbaiki
-void EstimasiCust(int IdCust) {
-    system("cls");
-    int ket = cust[IdCust].ket;
-    int waktu = 0;
-    
-    cout << "=== Estimasi Waktu Servis ===\n";
-    cout << "Nama\t\t\t: " << cust[IdCust].nama << endl;
-    cout << "No Polisi\t\t: " << cust[IdCust].motor.NoPol << endl;
-    cout << "Jenis Perbaikan\t\t: " << Perbaikan[cust[IdCust].perbaikan.jenisRusak] << endl;
-    cout << "Status\t\t\t: ";
-    
-    if(ket == 1) {
-        // Sedang dikerjakan
-        cout << "Sedang Dikerjakan" << endl;
-        waktu = WaktuPerbaikan[cust[IdCust].perbaikan.jenisRusak];
-        cout << "Estimasi waktu selesai: 0 - " << waktu << " menit" << endl;
-        cout << "Motor Anda sedang dalam proses perbaikan." << endl;
-        
-    } else if(ket == 2) {
-        // Dalam antrian
-        cout << "Dalam Antrian" << endl;
-        
-        // Waktu minimum dari yang sedang dikerjakan
-        int waktuMinimum = WaktuMinimumDikerjakan();
-        
-        // Cari posisi dalam antrian
-        int posisiAntrian = CariPosisiAntrian(IdCust);
-        
-        if(posisiAntrian != -1) {
-            // Hitung waktu tunggu dari antrian sebelumnya
-            waktu = waktuMinimum;
-            for(int i = 0; i < posisiAntrian; i++) {
-                int idAntrian = Antrian[i];
-                waktu += WaktuPerbaikan[cust[idAntrian].perbaikan.jenisRusak];
-            }
-            
-            // Tambahkan waktu untuk mengerjakan motor customer ini
-            int waktuPerbaikan = WaktuPerbaikan[cust[IdCust].perbaikan.jenisRusak];
-            
-            cout << "\nPosisi dalam antrian\t\t: " << (posisiAntrian + 1) << endl;
-            cout << "Estimasi mulai dikerjakan\t: " << waktu << " menit lagi" << endl;
-            cout << "Estimasi selesai\t\t: " << (waktu + waktuPerbaikan) << " menit lagi" << endl;
-        } else {
-            cout << "Error: Motor tidak ditemukan dalam antrian!" << endl;
-        }
-        
-    } else if(ket == 3) {
-        // Selesai, menunggu pembayaran
-        cout << "Selesai - Menunggu Pembayaran" << endl;
-        cout << "Kendaraan sudah selesai diperbaiki!" << endl;
-        cout << "Silahkan ke kasir untuk pembayaran." << endl;
-        cout << "Total yang harus dibayar: Rp" << cust[IdCust].totalharga << endl;
-        
-    } else if(ket == 0) {
-        // Sudah selesai dan dibayar
-        cout << "Sudah Selesai" << endl;
-        cout << "Kendaraan Anda telah selesai diperbaiki dan dibayar." << endl;
-        cout << "Terima kasih telah menggunakan layanan kami!" << endl;
-        
-    } else {
-        cout << "Status tidak dikenal" << endl;
-    }
-    
-    cout << setfill('=') << setw(40) << ' ' << endl;
-}
-
-// Fungsi untuk menampilkan estimasi semua customer (untuk admin)
-void TampilkanSemuaEstimasi() {
-    cout << "\n=== Estimasi Waktu Semua Customer ===\n";
-    
-    if(OnWork > 0) {
-        cout << "\n>> Sedang Dikerjakan:\n";
-        for(int i = 0; i < OnWork; i++) {
-            int id = Dikerjakan[i];
-            int waktu = WaktuPerbaikan[cust[id].perbaikan.jenisRusak];
-            cout << (i+1) << ". " << cust[id].motor.NoPol 
-                 << " (" << cust[id].nama << ") - " 
-                 << Perbaikan[cust[id].perbaikan.jenisRusak]
-                 << " | Estimasi: 0-" << waktu << " menit" << endl;
-        }
-    }
-    
-    if(OnQueue > 0) {
-        cout << "\n>> Dalam Antrian:\n";
-        int waktuMulai = WaktuMinimumDikerjakan();
-        int waktuAkumulasi = waktuMulai;
-        
-        for(int i = 0; i < OnQueue; i++) {
-            int id = Antrian[i];
-            int waktuPerbaikan = WaktuPerbaikan[cust[id].perbaikan.jenisRusak];
-            
-            cout << (i+1) << ". " << cust[id].motor.NoPol 
-                 << " (" << cust[id].nama << ") - " 
-                 << Perbaikan[cust[id].perbaikan.jenisRusak]
-                 << " | Mulai: " << waktuAkumulasi 
-                 << " | Selesai: " << (waktuAkumulasi + waktuPerbaikan) << " menit" << endl;
-            
-            waktuAkumulasi += waktuPerbaikan;
-        }
-    }
-    
-    if(OnPayment > 0) {
-        cout << "\n>> Menunggu Pembayaran:\n";
-        for(int i = 0; i < OnPayment; i++) {
-            int id = Pembayaran[i];
-            cout << (i+1) << ". " << cust[id].motor.NoPol 
-                 << " (" << cust[id].nama << ") - " 
-                 << "Total: Rp" << cust[id].totalharga << endl;
-        }
-    }
-    
-    cout << "\n====================================\n";
-}
-
-// Fungsi untuk mencari nomor polisi yang diperbaiki
-int CariEmail(string email) {
-    
-    for(int i = 0; i < DataCust; i++) {
-        string emailCust = cust[i].email;
-        if(email == emailCust) {
-            return i;
-        }
-    }
-    return -1;
-}
-
-// Fungsi customer UI yang diperbaiki
-void CustUI() {
-    string email;
-    cout << "\n=== Cek Status Kendaraan ===\n";
-    cout << "Masukan Email: "; 
-    cin >> email;
-    
-    int IdCust = CariEmail(email);
-    if(IdCust == -1) {
-        cout << "\nTidak ada kendaraan dengan Email tersebut dalam sistem.\n";
-        cout << "Pastikan Email yang Anda masukkan benar.\n";
-    } else {
-        EstimasiCust(IdCust);
-    }
-    
-    cout << "\nTekan Enter untuk kembali ke menu utama...";
-    cin.ignore();
-    cin.get();
-}
-
 int main(){
-    string user = "admin", pass = "admin";
-    char pilih;
+    int pilih;
     OpenFile();
     OpenStok();
     LoadStatus();
 
-    while(true){
-        system("cls");
-        cout << "Masuk sebagai : \n";
-        cout << "[1] Admin\n";
-        cout << "[2] Customer\n";
-        cout << "Pilih : "; cin >> pilih;
-        switch(pilih){
-            case '1':
-                system("cls");
-                cout << "=========== LOGIN ===========\n\n";
-                cout << "Masukan Username : "; cin >> user;
-                cout << "Masukan Password : "; cin >> pass;
-                if(user == "admin" && pass == "admin"){
-                    AdminUI();
-                }
-            break;
-            case '2':
-                CustUI();
-            break;
-            default:
-                cout << "\nInput tidak valid\n\n";
-                system("pause");
-            continue;
-        }
-    }
+    AdminUI();
+    CustUI();
 
-
-    // SaveFile();
-    // SaveStok();
-    // SaveStatus();
+    SaveFile();
+    SaveStok();
+    SaveStatus();
     return 0;
     
 }
